@@ -20,6 +20,7 @@ import (
 // operations are implemented. When using the Fd from a *os.File, call
 // syscall.Dup() on the fd, to avoid os.File's finalizer from closing
 // the file descriptor.
+/* fd ->  loopbackFile*/
 func NewLoopbackFile(fd int) FileHandle {
 	return &loopbackFile{fd: fd}
 }

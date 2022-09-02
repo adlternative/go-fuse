@@ -40,7 +40,7 @@ func mount(mountPoint string, opts *MountOptions, ready chan<- error) (fd int, e
 	if err != nil {
 		return 0, err
 	}
-
+	/* fusermount 执行挂载 */
 	cmd := exec.Command(bin,
 		"-o", strings.Join(opts.optionsStrings(), ","),
 		"-o", fmt.Sprintf("iosize=%d", opts.MaxWrite),

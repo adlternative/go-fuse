@@ -186,7 +186,7 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
 			return nil, fmt.Errorf("found ',' in option string %q", s)
 		}
 	}
-
+	/* 拿到可以同时执行的最大CPU数量 */
 	maxReaders := runtime.GOMAXPROCS(0)
 	if maxReaders < minMaxReaders {
 		maxReaders = minMaxReaders
@@ -227,6 +227,7 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
 		}
 		mountPoint = filepath.Clean(filepath.Join(cwd, mountPoint))
 	}
+	/* 执行挂载命令 */
 	fd, err := mount(mountPoint, &o, ms.ready)
 	if err != nil {
 		return nil, err
@@ -234,7 +235,7 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
 
 	ms.mountPoint = mountPoint
 	ms.mountFd = fd
-
+	/* 初始化（请求 + fs） */
 	if code := ms.handleInit(); !code.Ok() {
 		syscall.Close(fd)
 		// TODO - unmount as well?
@@ -297,6 +298,7 @@ func handleEINTR(fn func() error) (err error) {
 
 // Returns a new request, or error. In case exitIdle is given, returns
 // nil, OK if we have too many readers already.
+/* 从请求池中读取请求 */
 func (ms *Server) readRequest(exitIdle bool) (req *request, code Status) {
 	req = ms.reqPool.Get().(*request)
 	dest := ms.readPool.Get().([]byte)
@@ -327,6 +329,7 @@ func (ms *Server) readRequest(exitIdle bool) (req *request, code Status) {
 	if ms.latencies != nil {
 		req.startTime = time.Now()
 	}
+	/* 设置输入 */
 	gobbled := req.setInput(dest[:n])
 
 	ms.reqMu.Lock()
@@ -399,6 +402,7 @@ func (ms *Server) recordStats(req *request) {
 //
 // Each filesystem operation executes in a separate goroutine.
 func (ms *Server) Serve() {
+	/* 在 loop 里面循环接受/处理请求 */
 	ms.loop(false)
 	ms.loops.Wait()
 
@@ -447,6 +451,7 @@ func (ms *Server) handleInit() Status {
 
 	// INIT is handled. Init the file system, but don't accept
 	// incoming requests, so the file system can setup itself.
+	/* 初始化文件系统 */
 	ms.fileSystem.Init(ms)
 	return OK
 }
@@ -455,6 +460,7 @@ func (ms *Server) loop(exitIdle bool) {
 	defer ms.loops.Done()
 exit:
 	for {
+		/* 接受请求 */
 		req, errNo := ms.readRequest(exitIdle)
 		switch errNo {
 		case OK:
@@ -473,7 +479,7 @@ exit:
 			log.Printf("Failed to read from fuse conn: %v", errNo)
 			break exit
 		}
-
+		/* 处理请求 */
 		if ms.singleReader {
 			go ms.handleRequest(req)
 		} else {
@@ -482,12 +488,13 @@ exit:
 	}
 }
 
+/* 解析并处理请求 */
 func (ms *Server) handleRequest(req *request) Status {
 	if ms.opts.SingleThreaded {
 		ms.requestProcessingMu.Lock()
 		defer ms.requestProcessingMu.Unlock()
 	}
-
+	/* 解析请求 */
 	req.parse()
 	if req.handler == nil {
 		req.status = ENOSYS
@@ -504,9 +511,10 @@ func (ms *Server) handleRequest(req *request) Status {
 		log.Printf("Unimplemented opcode %v", operationName(req.inHeader.Opcode))
 		req.status = ENOSYS
 	} else if req.status.Ok() {
+		/* 执行指令  */
 		req.handler.Func(ms, req)
 	}
-
+	/* 发送输入 */
 	errNo := ms.write(req)
 	if errNo != 0 {
 		// Unless debugging is enabled, ignore ENOENT for INTERRUPT responses
@@ -532,6 +540,7 @@ func alignSlice(buf []byte, alignedByte, blockSize, size uintptr) []byte {
 	return buf[:size]
 }
 
+/* 分配输入空间大小 */
 func (ms *Server) allocOut(req *request, size uint32) []byte {
 	if cap(req.bufferPoolOutputBuf) >= int(size) {
 		req.bufferPoolOutputBuf = req.bufferPoolOutputBuf[:size]
@@ -547,6 +556,7 @@ func (ms *Server) allocOut(req *request, size uint32) []byte {
 	return req.bufferPoolOutputBuf
 }
 
+/* 将请求结果发出 */
 func (ms *Server) write(req *request) Status {
 	// Forget/NotifyReply do not wait for reply from filesystem server.
 	switch req.inHeader.Opcode {
@@ -889,6 +899,7 @@ func (in *InitIn) SupportsNotify(notifyType int) bool {
 // WaitMount waits for the first request to be served. Use this to
 // avoid racing between accessing the (empty or not yet mounted)
 // mountpoint, and the OS trying to setup the user-space mount.
+/* 处理第一个请求 */
 func (ms *Server) WaitMount() error {
 	err := <-ms.ready
 	if err != nil {

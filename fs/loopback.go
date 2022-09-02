@@ -30,6 +30,7 @@ type LoopbackRoot struct {
 	NewNode func(rootData *LoopbackRoot, parent *Inode, name string, st *syscall.Stat_t) InodeEmbedder
 }
 
+/* root 有 NewNode ? NewNode : 直接返回一个新节点 */
 func (r *LoopbackRoot) newNode(parent *Inode, name string, st *syscall.Stat_t) InodeEmbedder {
 	if r.NewNode != nil {
 		return r.NewNode(r, parent, name, st)
@@ -39,6 +40,7 @@ func (r *LoopbackRoot) newNode(parent *Inode, name string, st *syscall.Stat_t) I
 	}
 }
 
+/* stat -> stableAttr(mode,gen,ino) */
 func (r *LoopbackRoot) idFromStat(st *syscall.Stat_t) StableAttr {
 	// We compose an inode number by the underlying inode, and
 	// mixing in the device number. In traditional filesystems,
@@ -62,6 +64,8 @@ func (r *LoopbackRoot) idFromStat(st *syscall.Stat_t) StableAttr {
 // public so it can be used as a basis for other loopback based
 // filesystems. See NewLoopbackFile or LoopbackRoot for more
 // information.
+
+/* 节点实例 inode + 其他信息（这里定位 root） */
 type LoopbackNode struct {
 	Inode
 
@@ -90,6 +94,7 @@ var _ = (NodeUnlinker)((*LoopbackNode)(nil))
 var _ = (NodeRmdirer)((*LoopbackNode)(nil))
 var _ = (NodeRenamer)((*LoopbackNode)(nil))
 
+/* 获取节点(文件) statfs 状态 */
 func (n *LoopbackNode) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
 	s := syscall.Statfs_t{}
 	err := syscall.Statfs(n.path(), &s)
@@ -102,11 +107,13 @@ func (n *LoopbackNode) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.
 
 // path returns the full path to the file in the underlying file
 // system.
+// 获取节点文件绝对路径
 func (n *LoopbackNode) path() string {
 	path := n.Path(n.Root())
 	return filepath.Join(n.RootData.Path, path)
 }
 
+// 在目录(当然如果填文件会报错找不到 name)下查找 path = name 的 inode 生成新节点返回
 func (n *LoopbackNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*Inode, syscall.Errno) {
 	p := filepath.Join(n.path(), name)
 
@@ -124,6 +131,7 @@ func (n *LoopbackNode) Lookup(ctx context.Context, name string, out *fuse.EntryO
 
 // preserveOwner sets uid and gid of `path` according to the caller information
 // in `ctx`.
+/* 修改文件所有者 */
 func (n *LoopbackNode) preserveOwner(ctx context.Context, path string) error {
 	if os.Getuid() != 0 {
 		return nil
@@ -134,43 +142,50 @@ func (n *LoopbackNode) preserveOwner(ctx context.Context, path string) error {
 	}
 	return syscall.Lchown(path, int(caller.Uid), int(caller.Gid))
 }
-
+/* 创建节点（文件）并返回 inode */
 func (n *LoopbackNode) Mknod(ctx context.Context, name string, mode, rdev uint32, out *fuse.EntryOut) (*Inode, syscall.Errno) {
 	p := filepath.Join(n.path(), name)
+	/* mknod */
 	err := syscall.Mknod(p, mode, int(rdev))
 	if err != nil {
 		return nil, ToErrno(err)
 	}
+	/* chown */
 	n.preserveOwner(ctx, p)
 	st := syscall.Stat_t{}
 	if err := syscall.Lstat(p, &st); err != nil {
 		syscall.Rmdir(p)
 		return nil, ToErrno(err)
 	}
-
+	/* return stat */
 	out.Attr.FromStat(&st)
 
+	/* return newNode */
 	node := n.RootData.newNode(n.EmbeddedInode(), name, &st)
 	ch := n.NewInode(ctx, node, n.RootData.idFromStat(&st))
 
 	return ch, 0
 }
 
+/* 创建节点（文件夹） inode */
 func (n *LoopbackNode) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*Inode, syscall.Errno) {
 	p := filepath.Join(n.path(), name)
+	/* mkdir */
 	err := os.Mkdir(p, os.FileMode(mode))
 	if err != nil {
 		return nil, ToErrno(err)
 	}
+	/* chown */
 	n.preserveOwner(ctx, p)
 	st := syscall.Stat_t{}
 	if err := syscall.Lstat(p, &st); err != nil {
 		syscall.Rmdir(p)
 		return nil, ToErrno(err)
 	}
-
+	/* return stat */
 	out.Attr.FromStat(&st)
 
+	/* return newNode */
 	node := n.RootData.newNode(n.EmbeddedInode(), name, &st)
 	ch := n.NewInode(ctx, node, n.RootData.idFromStat(&st))
 
@@ -206,6 +221,7 @@ var _ = (NodeCreater)((*LoopbackNode)(nil))
 func (n *LoopbackNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (inode *Inode, fh FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	p := filepath.Join(n.path(), name)
 	flags = flags &^ syscall.O_APPEND
+	/* 创建文件 */
 	fd, err := syscall.Open(p, int(flags)|os.O_CREATE, mode)
 	if err != nil {
 		return nil, nil, 0, ToErrno(err)
@@ -217,10 +233,12 @@ func (n *LoopbackNode) Create(ctx context.Context, name string, flags uint32, mo
 		return nil, nil, 0, ToErrno(err)
 	}
 
+	/* new node */
 	node := n.RootData.newNode(n.EmbeddedInode(), name, &st)
 	ch := n.NewInode(ctx, node, n.RootData.idFromStat(&st))
+	/* return loopback file handle */
 	lf := NewLoopbackFile(fd)
-
+	/* return stat */
 	out.FromStat(&st)
 	return ch, lf, 0, 0
 }
@@ -280,16 +298,19 @@ func (n *LoopbackNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 }
 
 func (n *LoopbackNode) Open(ctx context.Context, flags uint32) (fh FileHandle, fuseFlags uint32, errno syscall.Errno) {
+	/* 去除 append */
 	flags = flags &^ syscall.O_APPEND
 	p := n.path()
 	f, err := syscall.Open(p, int(flags), 0)
 	if err != nil {
 		return nil, 0, ToErrno(err)
 	}
+	/* return loopback file handle */
 	lf := NewLoopbackFile(f)
 	return lf, 0, 0
 }
 
+/* 似乎是个空操作 */
 func (n *LoopbackNode) Opendir(ctx context.Context) syscall.Errno {
 	fd, err := syscall.Open(n.path(), syscall.O_DIRECTORY, 0755)
 	if err != nil {
@@ -299,6 +320,7 @@ func (n *LoopbackNode) Opendir(ctx context.Context) syscall.Errno {
 	return OK
 }
 
+/* DirStream = []DirEntry */
 func (n *LoopbackNode) Readdir(ctx context.Context) (DirStream, syscall.Errno) {
 	return NewLoopbackDirStream(n.path())
 }

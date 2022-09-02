@@ -22,6 +22,7 @@ import (
 type zipRoot struct {
 	fs.Inode
 
+	/* 用来解压缩 */
 	zr *zip.ReadCloser
 }
 

@@ -94,6 +94,7 @@ type rawBridge struct {
 }
 
 // newInode creates creates new inode pointing to ops.
+/* 检验和调整 id  然后创建新的 inode */
 func (b *rawBridge) newInodeUnlocked(ops InodeEmbedder, id StableAttr, persistent bool) *Inode {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -103,7 +104,7 @@ func (b *rawBridge) newInodeUnlocked(ops InodeEmbedder, id StableAttr, persisten
 	}
 
 	// This ops already was populated. Just return it.
-	if ops.embed().bridge != nil {
+		if ops.embed().bridge != nil {
 		return ops.embed()
 	}
 
@@ -136,6 +137,7 @@ func (b *rawBridge) logf(format string, args ...interface{}) {
 	}
 }
 
+/* 创建节点 + 调用 OnAdd */
 func (b *rawBridge) newInode(ctx context.Context, ops InodeEmbedder, id StableAttr, persistent bool) *Inode {
 	ch := b.newInodeUnlocked(ops, id, persistent)
 	if ch != ops.embed() {
@@ -283,6 +285,7 @@ func NewNodeFS(root InodeEmbedder, opts *Options) fuse.RawFileSystem {
 		bridge.options.AttrTimeout = &oneSec
 	}
 
+	/* 初始化 root */
 	initInode(root.embed(), root,
 		StableAttr{
 			Ino:  root.embed().StableAttr().Ino,
@@ -294,6 +297,7 @@ func NewNodeFS(root InodeEmbedder, opts *Options) fuse.RawFileSystem {
 	)
 	bridge.root = root.embed()
 	bridge.root.lookupCount = 1
+	/* inode-id -> inode */
 	bridge.kernelNodeIds = map[uint64]*Inode{
 		1: bridge.root,
 	}
@@ -301,6 +305,7 @@ func NewNodeFS(root InodeEmbedder, opts *Options) fuse.RawFileSystem {
 	// Fh 0 means no file handle.
 	bridge.files = []*fileEntry{{}}
 
+	/* OnAdd */
 	if opts.OnAdd != nil {
 		opts.OnAdd(context.Background())
 	} else if oa, ok := root.(NodeOnAdder); ok {

@@ -174,6 +174,7 @@ func (r *request) parseHeader() Status {
 
 func (r *request) parse() {
 	r.arg = r.inputBuf[:]
+	/* 获取指令对应的处理函数 如 _OP_OPEN -> doOpen -> Server.fileSystem.Open  */
 	r.handler = getHandler(r.inHeader.Opcode)
 	if r.handler == nil {
 		log.Printf("Unknown opcode %d", r.inHeader.Opcode)

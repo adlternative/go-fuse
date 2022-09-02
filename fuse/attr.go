@@ -57,6 +57,7 @@ func (a *Attr) ModTime() time.Time {
 	return time.Unix(int64(a.Mtime), int64(a.Mtimensec))
 }
 
+/* fileinfo -> stat */
 func ToStatT(f os.FileInfo) *syscall.Stat_t {
 	s, _ := f.Sys().(*syscall.Stat_t)
 	if s != nil {
@@ -65,6 +66,7 @@ func ToStatT(f os.FileInfo) *syscall.Stat_t {
 	return nil
 }
 
+/* fileinfo -> stat -> attr */
 func ToAttr(f os.FileInfo) *Attr {
 	if f == nil {
 		return nil

@@ -115,6 +115,7 @@ func (n *Inode) EmbeddedInode() *Inode {
 	return n
 }
 
+/* 初始化 inode */
 func initInode(n *Inode, ops InodeEmbedder, attr StableAttr, bridge *rawBridge, persistent bool, nodeId uint64) {
 	n.ops = ops
 	n.stableAttr = attr
@@ -273,6 +274,7 @@ func (n *Inode) Operations() InodeEmbedder {
 //
 // If you set `root`, Path() warns if it finds an orphaned Inode, i.e.
 // if it does not end up at `root` after walking the hierarchy.
+/* 相对 root 路径 */
 func (n *Inode) Path(root *Inode) string {
 	var segments []string
 	p := n

@@ -102,6 +102,7 @@ func main() {
 		opts.MountOptions.Options = append(opts.MountOptions.Options, "default_permissions")
 	}
 	if *ro {
+		/* TODO bug Mount fail: read-only file system */
 		opts.MountOptions.Options = append(opts.MountOptions.Options, "ro")
 	}
 	// First column in "df -T": original dir

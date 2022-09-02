@@ -21,6 +21,7 @@ func NewLoopbackDirStream(nm string) (DirStream, syscall.Errno) {
 
 	var entries []fuse.DirEntry
 	for {
+		/* 100 个读 */
 		want := 100
 		infos, err := f.Readdir(want)
 		for _, info := range infos {
