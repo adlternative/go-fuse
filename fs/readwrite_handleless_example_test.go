@@ -11,6 +11,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"testing"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -147,4 +148,8 @@ func Example_handleLess() {
 
 	// Serve the file system, until unmounted by calling fusermount -u
 	server.Wait()
+}
+
+func TestHandleLess(t *testing.T) {
+	Example_handleLess()
 }

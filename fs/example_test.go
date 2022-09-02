@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"testing"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -17,7 +18,7 @@ import (
 // ExampleMount shows how to create a loopback file system, and
 // mounting it onto a directory
 func Example_mount() {
-	mntDir, _ := ioutil.TempDir("", "")
+	mntDir, _ := ioutil.TempDir("/tmp/mnt", "")
 	home := os.Getenv("HOME")
 	// Make $HOME available on a mount dir under /tmp/ . Caution:
 	// write operations are also mirrored.
@@ -40,4 +41,8 @@ func Example_mount() {
 
 	// Serve the file system, until unmounted by calling fusermount -u
 	server.Wait()
+}
+
+func TestMount(t *testing.T) {
+	Example_mount()
 }

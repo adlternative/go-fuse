@@ -315,6 +315,9 @@ type NodeFlusher interface {
 // so any cleanup that requires specific synchronization or
 // could fail with I/O errors should happen in Flush instead.
 // The default implementation forwards to the FileHandle.
+/*  在一个FileHandle被遗忘之前，这个被调用。内核忽略了这个方法的返回值。
+所以任何需要特定同步的清理工作或可能因I/O错误而失败的清理工作应该在Flush中进行。
+默认实现是转发到FileHandle。 */
 type NodeReleaser interface {
 	Release(ctx context.Context, f FileHandle) syscall.Errno
 }

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"testing"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -39,6 +40,11 @@ func (root *inMemoryFS) OnAdd(ctx context.Context) {
 		p := &root.Inode
 
 		// Add directories leading up to the file.
+		/*
+			OnAdd a/b/c
+			root -> a
+			a-> b
+		*/
 		for _, component := range strings.Split(dir, "/") {
 			if len(component) == 0 {
 				continue
@@ -52,8 +58,10 @@ func (root *inMemoryFS) OnAdd(ctx context.Context) {
 				p.AddChild(component, ch, true)
 			}
 
+			/* 继续在子树上操作 */
 			p = ch
 		}
+		/* p 此时指向 b */
 
 		// Make a file out of the content bytes. This type
 		// provides the open/read/flush methods.
@@ -67,6 +75,7 @@ func (root *inMemoryFS) OnAdd(ctx context.Context) {
 		child := p.NewPersistentInode(ctx, embedder, fs.StableAttr{})
 
 		// And add it
+		/* p(b) -> c */
 		p.AddChild(base, child, true)
 	}
 }
@@ -75,7 +84,7 @@ func (root *inMemoryFS) OnAdd(ctx context.Context) {
 // read/write logic for the file is provided by the MemRegularFile type.
 func Example() {
 	// This is where we'll mount the FS
-	mntDir, _ := ioutil.TempDir("", "")
+	mntDir, _ := ioutil.TempDir("/tmp/inMemory", "")
 
 	root := &inMemoryFS{}
 	server, err := fs.Mount(mntDir, root, &fs.Options{
@@ -90,4 +99,8 @@ func Example() {
 
 	// Wait until unmount before exiting
 	server.Wait()
+}
+
+func TestInMemory(t *testing.T) {
+	Example()
 }

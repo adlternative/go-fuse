@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"syscall"
+	"testing"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -61,6 +62,7 @@ func numberToMode(n int) uint32 {
 var _ = (fs.NodeReaddirer)((*numberNode)(nil))
 
 // Readdir is part of the NodeReaddirer interface
+/* Readdir 返回一个流用来遍历所有目录项 */
 func (n *numberNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	r := make([]fuse.DirEntry, 0, n.num)
 	for i := 2; i < n.num; i++ {
@@ -78,6 +80,7 @@ func (n *numberNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) 
 var _ = (fs.NodeLookuper)((*numberNode)(nil))
 
 // Lookup is part of the NodeLookuper interface
+// Lookup 显示单个文件（目录项）ls 遍历整个目录甚至都会用 Lookup
 func (n *numberNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	i, err := strconv.Atoi(name)
 	if err != nil {
@@ -88,6 +91,7 @@ func (n *numberNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut
 		return nil, syscall.ENOENT
 	}
 
+	/* 属性（mode inode） */
 	stable := fs.StableAttr{
 		Mode: numberToMode(i),
 		// The child inode is identified by its Inode number.
@@ -95,9 +99,11 @@ func (n *numberNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut
 		// inode, they are deduplicated on this key.
 		Ino: uint64(i),
 	}
+	/* 真实节点 */
 	operations := &numberNode{num: i}
 
 	// The NewInode call wraps the `operations` object into an Inode.
+	/* {真实节点，属性} -> 创建一个 fs.Inode */
 	child := n.NewInode(ctx, operations, stable)
 
 	// In case of concurrent lookup requests, it can happen that operations !=
@@ -127,4 +133,8 @@ func Example_dynamic() {
 
 	// Wait until unmount before exiting
 	server.Wait()
+}
+
+func TestDynamic(t *testing.T) {
+	Example_dynamic()
 }

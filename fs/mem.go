@@ -49,6 +49,7 @@ func (f *MemRegularFile) Write(ctx context.Context, fh FileHandle, data []byte, 
 
 var _ = (NodeGetattrer)((*MemRegularFile)(nil))
 
+/* 获取 attr (包含文件大小 size) */
 func (f *MemRegularFile) Getattr(ctx context.Context, fh FileHandle, out *fuse.AttrOut) syscall.Errno {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -57,6 +58,7 @@ func (f *MemRegularFile) Getattr(ctx context.Context, fh FileHandle, out *fuse.A
 	return OK
 }
 
+/* 设置 attr (size) 并返回更新后的 attr */
 func (f *MemRegularFile) Setattr(ctx context.Context, fh FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -10,6 +10,7 @@ import (
 	"log"
 	"sync"
 	"syscall"
+	"testing"
 	"time"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -55,6 +56,8 @@ var _ = (fs.NodeReleaser)((*WindowsNode)(nil))
 // Release decreases the open count. The kernel doesn't wait with
 // returning from close(), so if the caller is too quick to
 // unlink/rename after calling close(), this may still trigger EBUSY.
+/* Release 会减少 openCount 。内核在从close()返回时不会等待，
+	所以如果调用者在调用close()后过快地取消链接/重命名，这仍然可能触发EBUSY。*/
 func (n *WindowsNode) Release(ctx context.Context, f fs.FileHandle) syscall.Errno {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -121,4 +124,8 @@ func Example_loopbackReuse() {
 	}
 	fmt.Printf("files under %s cannot be deleted if they are opened", mntDir)
 	server.Wait()
+}
+
+func TestLoopBackReuse(t *testing.T) {
+	Example_loopbackReuse()
 }

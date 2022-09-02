@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"testing"
+	"time"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -90,9 +92,12 @@ func (zr *zipRoot) OnAdd(ctx context.Context) {
 	// then construct a tree.  We construct the entire tree, and
 	// we don't want parts of the tree to disappear when the
 	// kernel is short on memory, so we use persistent inodes.
+	time.Sleep(1 * time.Second)
 	for _, f := range zr.zr.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
 		dir, base := filepath.Split(f.Name)
-
 		p := &zr.Inode
 		for _, component := range strings.Split(dir, "/") {
 			if len(component) == 0 {
@@ -133,4 +138,8 @@ func Example_zipFS() {
 	fmt.Println("zip file mounted")
 	fmt.Printf("to unmount: fusermount -u %s\n", mnt)
 	server.Wait()
+}
+
+func TestZipFS2(t *testing.T) {
+	Example_zipFS()
 }

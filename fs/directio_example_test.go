@@ -10,6 +10,7 @@ import (
 	"log"
 	"syscall"
 	"time"
+	"testing"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -43,6 +44,7 @@ type timeFile struct {
 // timeFile implements Open
 var _ = (fs.NodeOpener)((*timeFile)(nil))
 
+/* 每次 Open 都会更新其内容 */
 func (f *timeFile) Open(ctx context.Context, openFlags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	// disallow writes
 	if fuseFlags&(syscall.O_RDWR|syscall.O_WRONLY) != 0 {
@@ -56,6 +58,7 @@ func (f *timeFile) Open(ctx context.Context, openFlags uint32) (fh fs.FileHandle
 	}
 
 	// Return FOPEN_DIRECT_IO so content is not cached.
+	// 不缓存内容，这样用户永远读到最新的数据
 	return fh, fuse.FOPEN_DIRECT_IO, 0
 }
 
@@ -86,4 +89,8 @@ func Example_directIO() {
 
 	// Serve the file system, until unmounted by calling fusermount -u
 	server.Wait()
+}
+
+func TestDirectIO(t *testing.T) {
+	Example_directIO()
 }
