@@ -17,6 +17,8 @@ const direntSize = int(unsafe.Sizeof(_Dirent{}))
 
 // DirEntry is a type for PathFileSystem and NodeFileSystem to return
 // directory contents in.
+// DirEntry是PathFileSystem和NodeFileSystem的一个类型，用于返回
+// 目录中的内容。
 type DirEntry struct {
 	// Mode is the file's mode. Only the high bits (eg. S_IFDIR)
 	// are considered.
@@ -44,6 +46,8 @@ type DirEntryList struct {
 	// implementation detail and may change in the future.
 	// If `offset` and `fs.fileEntry.dirOffset` disagree, then a
 	// directory seek has taken place.
+	//目前go-fuse是以目录条目的数量来计算的，但这是一个实现细节，将来可能会改变。
+	//如果`offset`和`fs.fileEntry.dirOffset`不一致，那么就发生了一个目录搜索。
 	offset uint64
 	// pointer to the last serialized _Dirent. Used by FixMode().
 	lastDirent *_Dirent
@@ -79,8 +83,10 @@ func (l *DirEntryList) Add(prefix int, name string, inode uint64, mode uint32) b
 	if newLen > l.size {
 		return false
 	}
+	/* 扩容 */
 	l.buf = l.buf[:newLen]
 	oldLen += prefix
+	/* prefix(entryOut) dirent[ino,off,namelen,type] name padding */
 	dirent := (*_Dirent)(unsafe.Pointer(&l.buf[oldLen]))
 	dirent.Off = l.offset + 1
 	dirent.Ino = inode

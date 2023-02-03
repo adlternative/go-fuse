@@ -52,6 +52,14 @@ func (i *StableAttr) Reserved() bool {
 // The Inode struct contains a lock, so it should not be
 // copied. Inodes should be obtained by calling Inode.NewInode() or
 // Inode.NewPersistentInode().
+// Inode是VFS树中的一个节点。 节点被一对一地映射到
+// 操作实例，它是文件系统的扩展接口。
+// 系统的扩展接口。 人们可以提前创建完全成型的Inode树
+// 通过创建 "持久化 "的Inodes。
+//
+// Inode结构包含一个锁，所以它不应该被复制。
+// 复制。Inode应该通过调用Inode.NewInode()或
+// Inode.NewPersistentInode()。
 type Inode struct {
 	stableAttr StableAttr
 
@@ -274,7 +282,7 @@ func (n *Inode) Operations() InodeEmbedder {
 //
 // If you set `root`, Path() warns if it finds an orphaned Inode, i.e.
 // if it does not end up at `root` after walking the hierarchy.
-/* 相对 root 路径 */
+/* n 相对 root 路径 */
 func (n *Inode) Path(root *Inode) string {
 	var segments []string
 	p := n
@@ -345,6 +353,13 @@ func (iparent *Inode) setEntry(name string, ichild *Inode) {
 // automatically. NewPersistentInode creates inodes that go-fuse keeps
 // in memory, even if the kernel is not interested in them. This is
 // convenient for building static trees up-front.
+//NewPersistentInode返回一个Inode，其寿命不受内核控制。
+
+//当内核的内存不足时，它将忘记缓存的文件系统信息（目录条目和节点元数据）。
+//这将通过 FORGET 消息来宣布。我们不能保证这种情况是否发生或何时发生。
+//当它发生时，go-fuse会透明地处理这些问题：所有用NewInode创建的Inode会自动释放。
+//NewPersistentInode创建的节点被go-fuse保留在内存中，即使内核对它们不感兴趣。
+//这对于预先建立静态树是很方便的。
 func (n *Inode) NewPersistentInode(ctx context.Context, node InodeEmbedder, id StableAttr) *Inode {
 	return n.newInode(ctx, node, id, true)
 }
@@ -361,6 +376,10 @@ func (n *Inode) ForgetPersistent() {
 // id.Ino argument is used to implement hard-links.  If it is given,
 // and another node with the same ID is known, the new inode may be
 // ignored, and the old one used instead.
+//NewInode为给定的InodeEmbedder返回一个inode。
+//模式应该是标准的模式参数（例如：S_IFDIR）。
+//id.Ino参数中的inode编号是用来实现硬链接的。
+//如果它被给定，而另一个具有相同ID的节点是已知的，新的inode可能被忽略，而使用旧的。
 func (n *Inode) NewInode(ctx context.Context, node InodeEmbedder, id StableAttr) *Inode {
 	return n.newInode(ctx, node, id, false)
 }
@@ -414,7 +433,7 @@ retry:
 		if live {
 			return forgotten, live
 		}
-
+		/* 给所有的父节点加锁 */
 		lockNodes(lockme...)
 		if n.changeCounter != nChange {
 			unlockNodes(lockme...)
@@ -460,6 +479,7 @@ func (n *Inode) GetChild(name string) *Inode {
 
 // AddChild adds a child to this node. If overwrite is false, fail if
 // the destination already exists.
+/* 添加子节点（可覆盖） */
 func (n *Inode) AddChild(name string, ch *Inode, overwrite bool) (success bool) {
 	if len(name) == 0 {
 		log.Panic("empty name for inode")
@@ -470,6 +490,7 @@ retry:
 		lockNode2(n, ch)
 		prev, ok := n.children[name]
 		parentCounter := n.changeCounter
+		/* 如果之前没有重名 */
 		if !ok {
 			n.children[name] = ch
 			ch.parents.add(parentData{name, n})
@@ -482,14 +503,16 @@ retry:
 		if !overwrite {
 			return false
 		}
+		/* 重名则锁定三个节点 */
 		lockme := [3]*Inode{n, ch, prev}
 
 		lockNodes(lockme[:]...)
+		/* 出现并发，失败！重试 */
 		if parentCounter != n.changeCounter {
 			unlockNodes(lockme[:]...)
 			continue retry
 		}
-
+		/* 删 prev 再加 ch */
 		prev.parents.delete(parentData{name, n})
 		n.children[name] = ch
 		ch.parents.add(parentData{name, n})
@@ -630,6 +653,7 @@ retry:
 			oldChild.changeCounter++
 		}
 
+		/* newParent.child -= dest */
 		if destChild != nil {
 			// This can cause the child to be slated for
 			// removal; see below
@@ -639,6 +663,7 @@ retry:
 			newParent.changeCounter++
 		}
 
+		/* newParent.child += old */
 		if oldChild != nil {
 			newParent.children[newName] = oldChild
 			newParent.changeCounter++

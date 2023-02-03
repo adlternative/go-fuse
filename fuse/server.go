@@ -312,8 +312,10 @@ func (ms *Server) readRequest(exitIdle bool) (req *request, code Status) {
 	ms.reqMu.Unlock()
 
 	var n int
+	/* 遇到中断系统调用 */
 	err := handleEINTR(func() error {
 		var err error
+	/* 读取 mountFd 输入到 dest */
 		n, err = syscall.Read(ms.mountFd, dest)
 		return err
 	})
@@ -335,6 +337,7 @@ func (ms *Server) readRequest(exitIdle bool) (req *request, code Status) {
 	ms.reqMu.Lock()
 	defer ms.reqMu.Unlock()
 	// Must parse request.Unique under lock
+	/* 解析请求头 */
 	if status := req.parseHeader(); !status.Ok() {
 		return nil, status
 	}
@@ -415,6 +418,11 @@ func (ms *Server) Serve() {
 	// It is possible that umount comes in the middle - after retrieve
 	// request was sent to kernel, but corresponding kernel reply has not
 	// yet been read. We unblock all such readers and wake them up with ENODEV.
+	//关闭飞行中的高速缓存检索。
+	//
+	// 有可能umount出现在中间--在retrieve之后
+	// 请求被发送到内核，但相应的内核回复还没有被读取。
+	// 还没有被读取。我们解封所有这样的读取器，并用ENODEV唤醒它们。
 	ms.retrieveMu.Lock()
 	rtab := ms.retrieveTab
 	// retrieve attempts might be erroneously tried even after close
@@ -527,6 +535,7 @@ func (ms *Server) handleRequest(req *request) Status {
 		}
 
 	}
+	/* 回收资源 */
 	ms.returnRequest(req)
 	return Status(errNo)
 }

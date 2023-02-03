@@ -38,6 +38,10 @@ type fileEntry struct {
 	// directory entry sent to the kernel so far.
 	// If `dirOffset` and `fuse.DirEntryList.offset` disagree, then a
 	// directory seek has taken place.
+	// dirOffset是目录中的当前位置（见`telldir(3)`）。
+	//这个值相当于到目前为止发送到内核的最后一个目录条目的`d_off`（见`getdents(2)`）。
+	// 如果`dirOffset`和`fuse.DirEntryList.offset`不一致，
+	//那么就说明已经进行了一次 目录搜索已经发生。
 	dirOffset uint64
 
 	wg sync.WaitGroup
@@ -79,6 +83,13 @@ type rawBridge struct {
 	// go-fuse Inode object.
 	//
 	// A simple incrementing counter is used as the NodeID (see `nextNodeID`).
+	// *Node ID*是FUSE库选择的一个任意的uint64标识符。
+	// 在FUSE库和Linux内核之间的通信中，它被用来识别*节点*（文件/目录/符号链接/...）。
+	//
+	// 内核NodeIds映射在NodeID和相应的
+	// 的节点ID和相应的go-fuse Inode对象。
+	//
+	// 一个简单的递增计数器被用作NodeID（见`nextNodeID`）。
 	kernelNodeIds map[uint64]*Inode
 	// nextNodeID is the next free NodeID. Increment after copying the value.
 	nextNodeId uint64
@@ -87,6 +98,9 @@ type rawBridge struct {
 	// As the size of stableAttrs tracks kernelNodeIds (+- a few entries due to
 	// concurrent FORGETs, LOOKUPs, and the fixed NodeID 1), this is also a good
 	// estimate for stableAttrs.
+	// nodeCountHigh记录了我们在kernelNodeIds地图中的最高条目数。
+	// 由于 stableAttrs 的大小跟踪 kernelNodeIds (+- 由于并发的 FORGETs, LOOKUPs, 
+	//和固定的 NodeID 1 的几个条目), 这也是一个很好的 的估计。
 	nodeCountHigh int
 
 	files     []*fileEntry
@@ -266,6 +280,7 @@ func (b *rawBridge) setAttrTimeout(out *fuse.AttrOut) {
 // NewNodeFS creates a node based filesystem based on the
 // InodeEmbedder instance for the root of the tree.
 func NewNodeFS(root InodeEmbedder, opts *Options) fuse.RawFileSystem {
+	/* 初始化 bridge */
 	bridge := &rawBridge{
 		automaticIno: opts.FirstAutomaticIno,
 		server:       opts.ServerCallbacks,
@@ -285,7 +300,7 @@ func NewNodeFS(root InodeEmbedder, opts *Options) fuse.RawFileSystem {
 		bridge.options.AttrTimeout = &oneSec
 	}
 
-	/* 初始化 root */
+	/* 初始化 root {DIR nodeId=1} */
 	initInode(root.embed(), root,
 		StableAttr{
 			Ino:  root.embed().StableAttr().Ino,
@@ -492,6 +507,13 @@ func (b *rawBridge) Forget(nodeid, nlookup uint64) {
 // As a workaround, we recreate our two big maps (stableAttrs & kernelNodeIds)
 // every time they have shrunk dramatically (100 x smaller).
 // In this case, `nodeCountHigh` is reset to the new (smaller) size.
+// compactMemory 试图释放以前被遗忘的内存。
+// 的节点。
+//当元素被删除时， maps 不会释放所有的内存
+// ( https://github.com/golang/go/issues/20135 )。
+// 作为一种变通方法，我们重新创建我们的两个大 maps（stableAttrs & kernelNodeIds）。
+// 每当它们急剧缩小（小100倍）时。
+// 在这种情况下，`nodeCountHigh`被重置为新的（更小的）尺寸。
 func (b *rawBridge) compactMemory() {
 	b.mu.Lock()
 
@@ -741,6 +763,7 @@ func (b *rawBridge) Open(cancel <-chan struct{}, input *fuse.OpenIn, out *fuse.O
 }
 
 // registerFile hands out a file handle. Must have bridge.mu
+// b.files[fh].file = f && n.openfiles += fh 返回 fh(int)
 func (b *rawBridge) registerFile(n *Inode, f FileHandle, flags uint32) uint32 {
 	var fh uint32
 	if len(b.freeFiles) > 0 {
@@ -930,6 +953,8 @@ func (b *rawBridge) OpenDir(cancel <-chan struct{}, input *fuse.OpenIn, out *fus
 // seeks to offset requested in `input`. Caller must hold `f.mu`.
 // The `eof` return value shows if `f.dirStream` ended before the requested
 // offset was reached.
+// setStream确保`f.dirStream`和相关的状态变量被设置，并寻求在`input`中要求的偏移。调用者必须持有`f.mu`。
+// `eof`返回值显示`f.dirStream`是否在达到请求的偏移量之前结束。
 func (b *rawBridge) setStream(cancel <-chan struct{}, input *fuse.ReadIn, inode *Inode, f *fileEntry) (errno syscall.Errno, eof bool) {
 	// Get a new directory stream in the following cases:
 	// 1) f.dirStream == nil ............ First READDIR[PLUS] on this file handle.
@@ -1020,6 +1045,8 @@ func (b *rawBridge) ReadDir(cancel <-chan struct{}, input *fuse.ReadIn, out *fus
 	return fuse.OK
 }
 
+// ReadDirPlus https://www.pdl.cmu.edu/posix/docs/posix_io_readdir+.pdf
+// https://www.usenix.org/sites/default/files/conference/protected-files/srecon17_americas_slides_banks.pdf
 func (b *rawBridge) ReadDirPlus(cancel <-chan struct{}, input *fuse.ReadIn, out *fuse.DirEntryList) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
 

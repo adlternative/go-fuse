@@ -183,6 +183,14 @@ import (
 // In general, if an InodeEmbedder does not implement specific
 // filesystem methods, the filesystem will react as if it is a
 // read-only filesystem with a predefined tree structure.
+// InodeEmbedder是一个用于嵌入Inode的结构的接口。
+//
+// InodeEmbedder对象通常应该实现一些NodeXxxx
+// 接口，以提供用户定义的文件系统行为。
+//
+// 一般来说，如果一个InodeEmbedder没有实现特定的
+// 文件系统的方法，文件系统的反应就会像它是一个
+// 只读文件系统，具有预定义的树状结构。
 type InodeEmbedder interface {
 	// populateInode and inode are used internally to link Inode
 	// to a Node.
@@ -198,6 +206,10 @@ type InodeEmbedder interface {
 // Inode. If not defined, the `out` argument will zeroed with an OK
 // result.  This is because OSX filesystems must Statfs, or the mount
 // will not work.
+// Statfs实现了对持有该文件系统的统计。
+// Inode。如果没有定义，`out`参数将被清零，并有一个确定的
+// 结果。 这是因为OSX文件系统必须有Statfs，否则挂载
+// 将不会工作。
 type NodeStatfser interface {
 	Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno
 }
@@ -214,6 +226,13 @@ type NodeStatfser interface {
 // is necessary to either return permissions from GetAttr/Lookup or
 // set Options.DefaultPermissions in order to allow chdir into the
 // FUSE mount.
+// Access应该返回调用者是否能以给定的模式访问该文件。 这用于两个目的：确定用户是否可以进入一个目录，
+//以及回答实现访问系统调用。 在后一种情况下，上下文有关于真实UID的数据。
+//例如，一个由用户susan调用的root-SUID二进制文件在这里得到susan的UID和GID。
+//
+// 如果没有定义，默认的实现将检查Getattr结果的传统unix权限和调用者。
+// 如果是这样，有必要从GetAttr/Lookup返回权限或设置Options.DefaultPermissions，
+// 以便允许chdir进入 FUSE 挂载。
 type NodeAccesser interface {
 	Access(ctx context.Context, mask uint32) syscall.Errno
 }
@@ -225,6 +244,13 @@ type NodeAccesser interface {
 // mode of 0755 (directory) or 0644 (files). This can be switched off
 // with the Options.NullPermissions setting. If blksize is unset, 4096
 // is assumed, and the 'blocks' field is set accordingly.
+// GetAttr 读取一个 Inode 的属性。该库将确保
+// Mode 和 Ino 被正确设置。对于那些没有用FOPEN_DIRECTIO
+// 打开的文件，大小应该被设置，以便能够正确读取。 如果
+// 返回零权限，默认行为是改变
+// 0755（目录）或0644（文件）的模式。这可以关闭
+// 用Options.NullPermissions设置关闭。如果不设置blksize，则假定为4096
+// 并且'block'字段被相应设置。
 type NodeGetattrer interface {
 	Getattr(ctx context.Context, f FileHandle, out *fuse.AttrOut) syscall.Errno
 }
@@ -502,6 +528,22 @@ type NodeRenamer interface {
 // FileHandle. Files that have such dynamic content should return the
 // FOPEN_DIRECT_IO flag from their `Open` method. See directio_test.go
 // for an example.
+// FileHandle是打开文件的资源标识符。通常情况下，一个
+// FileHandle 应该实现 FileXxxx 的一些接口。
+//
+// 所有的 FileXxxx 操作也可以在 InodeEmbedder 层实现。
+// 例如，可以实现NodeReader 而不是FileReader。
+//
+// FileHandles在两种情况下是有用的。首先，如果底层的
+// 存储系统需要一个读/写的句柄。这就是
+// Unix系统调用的情况，它需要一个文件描述符。
+// 函数`NewLoopbackFile`）。其次，它对于
+// 实现其内容不与inode绑定的文件。例如
+// 例如，像`/proc/interrupts`这样的文件没有固定的内容，但是
+// 在每次打开调用时都会发生变化。这意味着，每个文件句柄必须
+// 有自己的内容视图；这个视图可以绑定一个
+// FileHandle。具有这种动态内容的文件应该返回
+// FOPEN_DIRECT_IO标志，从他们的`Open`方法。参见directio_test.go
 type FileHandle interface {
 }
 
@@ -555,6 +597,7 @@ type FileFsyncer interface {
 	Fsync(ctx context.Context, flags uint32) syscall.Errno
 }
 
+// TODO(adl) 文档修复
 // See NodeFsync.
 type FileSetattrer interface {
 	Setattr(ctx context.Context, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno

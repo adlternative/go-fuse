@@ -16,6 +16,8 @@ import (
 // LoopbackRoot holds the parameters for creating a new loopback
 // filesystem. Loopback filesystem delegate their operations to an
 // underlying POSIX file system.
+// LoopbackRoot 持有创建一个新的回环文件系统的参数。
+// Loopback 系统将其操作委托给底层的POSIX文件系统。
 type LoopbackRoot struct {
 	// The path to the root of the underlying file system.
 	Path string
